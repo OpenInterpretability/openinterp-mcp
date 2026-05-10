@@ -13,6 +13,9 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict
 
 
+_VOLATILE_KEYS = {"capture_id", "manifest_sha256", "call_id", "timestamp", "audit_sha256"}
+
+
 @dataclass
 class Manifest:
     call_id: str
@@ -24,9 +27,29 @@ class Manifest:
 
     @property
     def sha256(self) -> str:
+        """Content hash: deterministic across calls with identical (tool, inputs, outputs, config).
+
+        Excludes timestamp + call_id so the SAME experiment always produces the SAME hash.
+        This is what papers cite. For unique-per-call tracking use `audit_sha256`.
+        """
         payload = json.dumps(
             {
                 "tool": self.tool,
+                "input_hash": self.input_hash,
+                "output_hash": self.output_hash,
+                "config": self.config,
+            },
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    @property
+    def audit_sha256(self) -> str:
+        """Audit hash: unique per call (includes timestamp + call_id). For log integrity."""
+        payload = json.dumps(
+            {
+                "tool": self.tool,
+                "call_id": self.call_id,
                 "timestamp": self.timestamp,
                 "input_hash": self.input_hash,
                 "output_hash": self.output_hash,
@@ -39,11 +62,17 @@ class Manifest:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["sha256"] = self.sha256
+        d["audit_sha256"] = self.audit_sha256
         return d
 
 
 def _hash_payload(payload: Any) -> str:
-    serialized = json.dumps(payload, sort_keys=True, default=str)
+    """Stable content hash: strips volatile keys (UUIDs, timestamps) before hashing."""
+    if isinstance(payload, dict):
+        clean = {k: v for k, v in payload.items() if k not in _VOLATILE_KEYS}
+    else:
+        clean = payload
+    serialized = json.dumps(clean, sort_keys=True, default=str)
     return hashlib.sha256(serialized.encode()).hexdigest()
 
 
