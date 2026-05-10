@@ -4,7 +4,7 @@ from __future__ import annotations
 import base64
 import io
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -37,14 +37,14 @@ class HealthResponse(BaseModel):
 class CaptureRequest(BaseModel):
     prompt: str
     layers: List[int]
-    positions: List[str] = Field(default_factory=lambda: ["end_question"])
+    positions: List[Union[str, int]] = Field(default_factory=lambda: ["end_question"])
     max_new_tokens: int = 0
 
 
 class CaptureResponse(BaseModel):
     capture_id: str
     layers: List[int]
-    positions: List[str]
+    positions: List[Union[str, int]]
     position_indices: List[int]
     n_input_tokens: int
     d_model: int
