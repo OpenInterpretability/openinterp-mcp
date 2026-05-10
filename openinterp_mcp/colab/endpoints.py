@@ -82,6 +82,26 @@ class SAELookupRequest(BaseModel):
     top_k: int = 32
 
 
+class TrainProbeRequest(BaseModel):
+    probe_id: str = Field(..., description="Unique id for the trained probe")
+    prompts: List[str]
+    labels: List[int]
+    layer: int
+    position: str = "end_question"
+    c: float = Field(default=1.0, description="LogisticRegression C parameter")
+    max_iter: int = 2000
+
+
+class LoadProbeRequest(BaseModel):
+    probe_id: str
+    layer: int
+    position: str = "end_question"
+    direction: List[float]
+    bias: float = 0.0
+    source_url: Optional[str] = None
+    license: str = "apache-2.0"
+
+
 # ---------- routes ----------
 
 
@@ -366,3 +386,102 @@ def causality_protocol(req: CausalityProtocolRequest) -> Dict[str, Any]:
 @router.get("/manifests")
 def list_manifests(limit: int = 50) -> Dict[str, Any]:
     return {"count": len(STATE.manifests), "manifests": STATE.manifests[-limit:]}
+
+
+@router.post("/train-probe")
+def train_probe(req: TrainProbeRequest) -> Dict[str, Any]:
+    """Capture activations across labeled prompts, train a linear probe, register it in STATE.
+
+    Convenience endpoint: lets an agent bootstrap a probe + combined capture in one round-trip,
+    without needing direct access to the Colab Python kernel.
+
+    Returns probe_id, capture_id (with all N rows + labels), train_accuracy.
+    """
+    if STATE.model is None or STATE.tokenizer is None:
+        raise HTTPException(503, "Model not loaded.")
+    if len(req.prompts) != len(req.labels):
+        raise HTTPException(400, "prompts and labels must have equal length")
+    if len(set(req.labels)) < 2:
+        raise HTTPException(400, "labels must contain at least two distinct values")
+
+    from openinterp_mcp.colab.hooks import capture_layers
+    from sklearn.linear_model import LogisticRegression
+    import torch
+
+    model, tok = STATE.model, STATE.tokenizer
+    device = next(model.parameters()).device
+
+    rows: List[np.ndarray] = []
+    for prompt in req.prompts:
+        enc = tok(prompt, return_tensors="pt").to(device)
+        n_input = int(enc["input_ids"].shape[1])
+        idx = resolve_positions([req.position], n_input)[0]
+        with capture_layers(model, [req.layer]) as buf:
+            with torch.no_grad():
+                model(input_ids=enc["input_ids"])
+        act = buf[req.layer][0, idx, :].to(dtype=torch.float32).cpu().numpy()
+        rows.append(act)
+
+    X = np.stack(rows)
+    y = np.array(req.labels)
+
+    clf = LogisticRegression(max_iter=req.max_iter, C=req.c).fit(X, y)
+    direction = clf.coef_[0].astype(np.float32)
+    bias = float(clf.intercept_[0])
+    train_acc = float(clf.score(X, y))
+
+    STATE.probes[req.probe_id] = {
+        "id": req.probe_id,
+        "model_id": STATE.model_id,
+        "layer": req.layer,
+        "position": req.position,
+        "license": "apache-2.0",
+        "source_url": "in-session via /train-probe",
+        "direction": direction,
+        "bias": bias,
+        "training": {"n": len(req.prompts), "C": req.c, "train_accuracy": train_acc},
+    }
+
+    capture_id = f"{req.probe_id}__train_capture"
+    STATE.captures[capture_id] = {
+        "prompt": req.prompts[0],  # representative for steering test inside causality_protocol
+        "layers": [req.layer],
+        "positions": [req.position] * len(req.prompts),
+        "position_indices": list(range(len(req.prompts))),
+        "n_input_tokens": len(req.prompts),
+        "tensors": {req.layer: X},
+        "labels": req.labels,
+    }
+
+    result = {
+        "probe_id": req.probe_id,
+        "capture_id": capture_id,
+        "layer": req.layer,
+        "position": req.position,
+        "n_samples": len(req.prompts),
+        "d_model": int(X.shape[1]),
+        "train_accuracy": train_acc,
+        "direction_norm": float(np.linalg.norm(direction)),
+    }
+    m = build_manifest("train_probe", req.model_dump(), result, config={"model_id": STATE.model_id})
+    STATE.manifests.append(m.to_dict())
+    result["manifest_sha256"] = m.sha256
+    return result
+
+
+@router.post("/load-probe")
+def load_probe_endpoint(req: LoadProbeRequest) -> Dict[str, Any]:
+    """Register a pre-trained probe (direction + bias) without running model forward passes."""
+    direction = np.array(req.direction, dtype=np.float32)
+    STATE.probes[req.probe_id] = {
+        "id": req.probe_id,
+        "model_id": STATE.model_id,
+        "layer": req.layer,
+        "position": req.position,
+        "license": req.license,
+        "source_url": req.source_url or "loaded via /load-probe",
+        "direction": direction,
+        "bias": req.bias,
+        "training": {},
+    }
+    return {"probe_id": req.probe_id, "layer": req.layer, "d_model": int(direction.shape[0])}
