@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openinterp-mcp"
-version = "0.0.5"
+version = "0.1.0"
 description = "MCP server + Colab backend for mechanistic interpretability research. Bring-your-own-agent. Privacy-first."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Caio Vicentino", email = "caio@openinterp.org" }]
 keywords = ["mechanistic-interpretability", "mcp", "claude-code", "probes", "sae", "agent-monitoring"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.10",
