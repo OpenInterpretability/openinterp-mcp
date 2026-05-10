@@ -1,0 +1,62 @@
+name: Citation tracker
+
+on:
+  schedule:
+    - cron: "0 7 * * *"  # 07:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      OPENINTERP_REGISTRY_INDEX: https://raw.githubusercontent.com/OpenInterpretability/registry/main/index.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          pip install -e .
+
+      - name: Scan citations
+        run: |
+          python -c "
+          from pathlib import Path
+          import os
+          from openinterp_mcp.atlas.citations import scan_registry
+          out = Path('citations.jsonl')
+          new = scan_registry(os.environ['OPENINTERP_REGISTRY_INDEX'], out)
+          print(f'new_citations: {new}')
+          "
+
+      - name: Commit citations
+        run: |
+          git config user.name 'openinterp-bot'
+          git config user.email 'bot@openinterp.org'
+          git add citations.jsonl
+          if ! git diff --staged --quiet; then
+            git commit -m "citations: nightly scan $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Send digests
+        if: ${{ vars.ENABLE_DIGEST == 'true' }}
+        env:
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+        run: |
+          python -c "
+          from pathlib import Path
+          from datetime import datetime, timedelta
+          from openinterp_mcp.atlas.digest import run_digest_for_all
+          since = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+          sent = run_digest_for_all(Path('contributors.json'), Path('citations.jsonl'), since)
+          print(f'emails_sent: {sent}')
+          "
