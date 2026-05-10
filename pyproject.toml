@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openinterp-mcp"
+version = "0.0.1"
+description = "MCP server + Colab backend for mechanistic interpretability research. Bring-your-own-agent. Privacy-first."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Caio Vicentino", email = "caio@openinterp.org" }]
+keywords = ["mechanistic-interpretability", "mcp", "claude-code", "probes", "sae", "agent-monitoring"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.5",
+    "httpx>=0.27",
+    "pyngrok>=7.0",
+]
+
+[project.optional-dependencies]
+colab = [
+    "transformers>=4.45",
+    "torch>=2.2",
+    "safetensors>=0.4",
+    "scikit-learn>=1.4",
+    "numpy>=1.26",
+]
+server = [
+    "mcp>=1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+    "black>=24.0",
+]
+
+[project.urls]
+Homepage = "https://openinterp.org"
+Repository = "https://github.com/OpenInterpretability/openinterp-mcp"
+Documentation = "https://openinterp.org/mcp"
+"Bug Tracker" = "https://github.com/OpenInterpretability/openinterp-mcp/issues"
+
+[project.scripts]
+openinterp-mcp = "openinterp_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["openinterp_mcp*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
