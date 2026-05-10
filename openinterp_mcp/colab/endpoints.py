@@ -302,12 +302,32 @@ def sae_lookup(req: SAELookupRequest) -> Dict[str, Any]:
 
     sae_key = f"{req.sae_id}#L{req.layer}"
     if sae_key not in STATE.probes:
-        sae = load_sae(req.sae_id, req.layer)
+        try:
+            sae = load_sae(req.sae_id, req.layer)
+        except FileNotFoundError as e:
+            raise HTTPException(404, f"SAE not found for L{req.layer} in `{req.sae_id}`: {e}")
+        except Exception as e:
+            raise HTTPException(502, {
+                "error": "sae_load_failed",
+                "sae_id": req.sae_id,
+                "layer": req.layer,
+                "detail": str(e),
+                "hint": "Make sure the SAE is published on HF and contains an L{layer} encoder shard. "
+                        "For Qwen3.6-27B use `caiovicentino1/qwen36-27b-sae-fullstack`; for other models "
+                        "you'll need to train your own (no general-purpose Qwen2.5-3B SAE is published yet).",
+            })
         STATE.probes[sae_key] = sae
 
     sae = STATE.probes[sae_key]
-    activation = cap["tensors"][req.layer][0]
-    features = top_k_features(activation, sae["encoder"], req.top_k, sae.get("feature_descriptions"))
+    activation_row = cap["tensors"][req.layer][0]
+    if activation_row.shape[0] != sae["encoder"].shape[1]:
+        raise HTTPException(400, {
+            "error": "d_model_mismatch",
+            "capture_d_model": int(activation_row.shape[0]),
+            "sae_d_model": int(sae["encoder"].shape[1]),
+            "hint": "Loaded SAE was trained for a different model. Use an SAE matching the active model.",
+        })
+    features = top_k_features(activation_row, sae["encoder"], req.top_k, sae.get("feature_descriptions"))
 
     result = {
         "sae_id": req.sae_id,

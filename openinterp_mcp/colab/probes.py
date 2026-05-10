@@ -95,14 +95,9 @@ def auroc(scores: np.ndarray, labels: np.ndarray) -> float:
 def random_feature_baseline(
     n_samples: int, d_model: int, labels: np.ndarray, n_seeds: int = 5
 ) -> Dict[str, float]:
-    """Construct random Gaussian probes of dimension d_model and report their mean AUROC.
-
-    Use this as a sanity check when N is small: real probe AUROC should significantly exceed
-    the random baseline. Per paper-6, mandatory at N<100.
-    """
+    """Random direction × random activations baseline. Floor case. AUROC should hover near 0.5."""
     aurocs = []
-    rng_seeds = list(range(n_seeds))
-    for s in rng_seeds:
+    for s in range(n_seeds):
         rng = np.random.default_rng(s)
         random_dir = rng.standard_normal(d_model).astype(np.float32)
         random_dir /= np.linalg.norm(random_dir) + 1e-8
@@ -110,3 +105,54 @@ def random_feature_baseline(
         scores = apply_probe(random_acts, random_dir, 0.0)
         aurocs.append(auroc(scores, labels))
     return {"mean": float(np.mean(aurocs)), "std": float(np.std(aurocs)), "n_seeds": n_seeds}
+
+
+def random_direction_on_real_baseline(
+    real_activations: np.ndarray, labels: np.ndarray, n_seeds: int = 5
+) -> Dict[str, float]:
+    """Random direction applied to REAL activations. Tests whether the probe direction is
+    distinguishable from a random direction in the same activation space.
+
+    At small N with high d_model, even random directions can pick up structural correlations
+    in real activations. This is the SECOND mandatory check beyond paper-6's random-feature
+    floor (which uses random activations). Real-activation-based baseline is the harder test.
+    """
+    aurocs = []
+    d_model = real_activations.shape[1]
+    for s in range(n_seeds):
+        rng = np.random.default_rng(s + 100)
+        random_dir = rng.standard_normal(d_model).astype(np.float32)
+        random_dir /= np.linalg.norm(random_dir) + 1e-8
+        scores = apply_probe(real_activations, random_dir, 0.0)
+        aurocs.append(auroc(scores, labels))
+    return {"mean": float(np.mean(aurocs)), "std": float(np.std(aurocs)), "n_seeds": n_seeds}
+
+
+def shuffled_label_baseline(
+    real_activations: np.ndarray, labels: np.ndarray, n_seeds: int = 5
+) -> Dict[str, float]:
+    """Train a probe on SHUFFLED labels, evaluate against TRUE labels.
+
+    This is the most principled small-N check: if your probe AUROC on true labels isn't
+    materially higher than a probe trained on randomly-permuted labels (then evaluated against
+    the true labels), your probe is memorizing the dataset, not learning a real direction.
+    Mandatory at N<100 per the Phase 6c finding.
+    """
+    try:
+        from sklearn.linear_model import LogisticRegression
+    except ImportError:
+        return {"mean": 0.5, "std": 0.0, "n_seeds": 0, "skipped": "sklearn unavailable"}
+    aurocs = []
+    for s in range(n_seeds):
+        rng = np.random.default_rng(s + 200)
+        permuted = labels.copy()
+        rng.shuffle(permuted)
+        try:
+            clf = LogisticRegression(max_iter=2000, C=1.0).fit(real_activations, permuted)
+        except Exception:
+            continue
+        scores = apply_probe(real_activations, clf.coef_[0], float(clf.intercept_[0]))
+        aurocs.append(auroc(scores, labels))
+    if not aurocs:
+        return {"mean": 0.5, "std": 0.0, "n_seeds": 0}
+    return {"mean": float(np.mean(aurocs)), "std": float(np.std(aurocs)), "n_seeds": len(aurocs)}
