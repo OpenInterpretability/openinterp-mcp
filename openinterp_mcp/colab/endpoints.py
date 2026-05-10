@@ -201,7 +201,16 @@ def probe(req: ProbeEvalRequest) -> Dict[str, Any]:
         raise HTTPException(400, f"capture_id has no activations at layer {layer}.")
 
     acts = cap["tensors"][layer]
-    scores = apply_probe(acts, p["direction"], p["bias"])
+    direction = np.asarray(p["direction"])
+    if direction.shape[0] != acts.shape[1]:
+        raise HTTPException(400, {
+            "error": "d_model_mismatch",
+            "probe_d_model": int(direction.shape[0]),
+            "capture_d_model": int(acts.shape[1]),
+            "hint": "Probe direction dimensionality must match capture d_model. "
+                    "Probe is for a different model or layer than the capture.",
+        })
+    scores = apply_probe(acts, direction, p["bias"])
 
     result: Dict[str, Any] = {
         "probe_id": req.probe_id,
@@ -234,7 +243,16 @@ def steer(req: SteerRequest) -> Dict[str, Any]:
     import torch
 
     p = STATE.probes[req.direction_id]
-    direction = torch.from_numpy(np.asarray(p["direction"]))
+    direction_arr = np.asarray(p["direction"])
+    d_model = int(STATE.model.config.hidden_size) if hasattr(STATE.model, "config") else direction_arr.shape[0]
+    if direction_arr.shape[0] != d_model:
+        raise HTTPException(400, {
+            "error": "d_model_mismatch",
+            "probe_d_model": int(direction_arr.shape[0]),
+            "model_d_model": d_model,
+            "hint": "Steering direction dimensionality must match model hidden size.",
+        })
+    direction = torch.from_numpy(direction_arr)
 
     tok = STATE.tokenizer
     model = STATE.model
