@@ -1,4 +1,4 @@
-"""FastAPI route handlers — Phase 1 final: substantive implementations of all 7 primitives."""
+"""FastAPI route handlers — Phase 1 final: substantive implementations of all 8 primitives."""
 from __future__ import annotations
 
 import base64

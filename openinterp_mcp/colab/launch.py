@@ -1,6 +1,6 @@
 """Researcher entry point. One call from a Colab cell brings up:
 
-  - FastAPI app with 7 typed endpoints
+  - FastAPI app with 8 typed endpoints
   - HTTPS ngrok tunnel
   - Loaded HF model + tokenizer
   - Probe registry (empty by default; researchers add via /list-probes or HF refs)
