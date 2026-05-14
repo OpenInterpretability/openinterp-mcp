@@ -6,6 +6,8 @@
 > **Bring your own agent.** Works with Claude Code, Cursor, Cline, OpenHands, Aider, or any harness that speaks MCP.
 > **Privacy-first.** We do not host inference. We do not custody your keys. Your Colab session, your model, your data.
 
+<a href="https://www.producthunt.com/products/openinterpretability?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openinterpretability" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1146555&theme=light&t=1778728126905" alt="OpenInterpretability - Open-source toolkit to audit what your LLM knows | Product Hunt" width="250" height="54" /></a>
+
 ## What this is
 
 A research toolkit that turns probe-causality and SAE-feature experiments into agent-callable primitives. Researchers run the model on their own compute (Colab Pro recommended), expose an HTTPS endpoint over ngrok, and let an LLM agent drive experiments via **8 typed MCP tools**.
