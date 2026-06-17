@@ -81,10 +81,16 @@ def sae_lookup(sae_id: str, capture_id: str, layer: int, top_k: int = 32,
 
 def causality_protocol(probe_id: str, capture_id: str, labels: list[int],
                        alpha_sweep: Optional[list[float]] = None, n_random_seeds: int = 5,
+                       structure_matched_capture_id: Optional[str] = None,
+                       structure_matched_labels: Optional[list[int]] = None,
+                       feature_name: Optional[str] = None,
                        session_name: str = "default") -> Dict[str, Any]:
     body: Dict[str, Any] = {
         "probe_id": probe_id, "capture_id": capture_id, "labels": labels,
         "n_random_seeds": n_random_seeds,
     }
     if alpha_sweep: body["alpha_sweep"] = alpha_sweep
+    if structure_matched_capture_id: body["structure_matched_capture_id"] = structure_matched_capture_id
+    if structure_matched_labels: body["structure_matched_labels"] = structure_matched_labels
+    if feature_name: body["feature_name"] = feature_name
     return _post("/causality-protocol", body, session_name, timeout=300.0)

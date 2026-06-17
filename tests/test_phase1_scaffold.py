@@ -64,7 +64,9 @@ def test_probe_404_unknown_id():
     assert resp.status_code == 404
 
 
-def test_steer_501_phase1_stub():
+def test_steer_503_without_loaded_model():
+    # steer is implemented now (no longer a Phase-1 501 stub); with no model loaded it must
+    # refuse with 503 Service Unavailable rather than attempt a forward pass.
     client = _make_client()
     resp = client.post(
         "/steer",
@@ -75,7 +77,7 @@ def test_steer_501_phase1_stub():
             "alpha": 1.0,
         },
     )
-    assert resp.status_code == 501
+    assert resp.status_code == 503
 
 
 def test_manifest_sha_stable():

@@ -126,7 +126,7 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
     },
     {
         "name": "causality_protocol",
-        "description": "Run the three mandatory checks (random-feature baseline, control-token norm, structural-rigidity α-sweep) and return a verdict in {causal, weak-causal, epiphenomenal-softmax, epiphenomenal-template, undetermined}. Requires a capture_id with stored activations + binary labels.",
+        "description": "Run the four mandatory checks (random-feature baseline, control-token norm, structural-rigidity α-sweep, and the paper-11 structure-matched control + naming gate) and return a verdict in {causal, weak-causal, confounded-structural, epiphenomenal-softmax, epiphenomenal-template, inconclusive-unverified, undetermined}. Requires a capture_id with stored activations + binary labels. A `causal` verdict is ONLY returned when the signal survives a structure-matched control AND the feature is named — high AUROC without both is `inconclusive-unverified`, not causal (paper-11 lesson).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -136,6 +136,12 @@ TOOL_DEFINITIONS: List[Dict[str, Any]] = [
                 "alpha_sweep": {"type": "array", "items": {"type": "number"},
                                 "default": [-200, -100, -50, 50, 100, 200]},
                 "n_random_seeds": {"type": "integer", "default": 5},
+                "structure_matched_capture_id": {"type": "string",
+                    "description": "Check 4a: a confound-balanced capture (structure/lexicon/punctuation balanced vs label). The same probe is re-evaluated on it; if the above-chance signal collapses, the verdict is confounded-structural."},
+                "structure_matched_labels": {"type": "array", "items": {"type": "integer"},
+                    "description": "Binary labels for the structure-matched capture rows."},
+                "feature_name": {"type": "string",
+                    "description": "Check 4b: the feature's max-activating-context name. Required before any causal claim — high AUROC without naming is a non-result."},
                 "session_name": {"type": "string", "default": "default"},
             },
             "required": ["probe_id", "capture_id", "labels"],
@@ -200,6 +206,9 @@ def _dispatch(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
             arguments["probe_id"], arguments["capture_id"], arguments["labels"],
             alpha_sweep=arguments.get("alpha_sweep"),
             n_random_seeds=arguments.get("n_random_seeds", 5),
+            structure_matched_capture_id=arguments.get("structure_matched_capture_id"),
+            structure_matched_labels=arguments.get("structure_matched_labels"),
+            feature_name=arguments.get("feature_name"),
             session_name=session_name,
         )
 

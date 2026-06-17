@@ -10,6 +10,9 @@ permissions:
 
 jobs:
   scan:
+    # Disabled by default: the nightly scan needs a populated registry index + push rights.
+    # Set repo variable ENABLE_CITATION_TRACKER=true to turn it on. Off => job is skipped, not failed.
+    if: ${{ vars.ENABLE_CITATION_TRACKER == 'true' }}
     runs-on: ubuntu-latest
     env:
       OPENINTERP_REGISTRY_INDEX: https://raw.githubusercontent.com/OpenInterpretability/registry/main/index.json

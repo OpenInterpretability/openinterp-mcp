@@ -73,6 +73,10 @@ class CausalityProtocolRequest(BaseModel):
     labels: Optional[List[int]] = None
     alpha_sweep: List[float] = Field(default_factory=lambda: [-200.0, -100.0, -50.0, 50.0, 100.0, 200.0])
     n_random_seeds: int = 5
+    # Check 4 (paper-11) — structure-matched control + naming gate.
+    structure_matched_capture_id: Optional[str] = None  # confound-balanced capture (same probe re-evaluated)
+    structure_matched_labels: Optional[List[int]] = None
+    feature_name: Optional[str] = None  # max-activating-context name; required before any causal claim
 
 
 class SAELookupRequest(BaseModel):
@@ -404,6 +408,18 @@ def causality_protocol(req: CausalityProtocolRequest) -> Dict[str, Any]:
         except HTTPException:
             steering_results.append({"alpha": alpha, "delta_rel": 0.0, "flip_rate": 0.0})
 
+    # Check 4a — structure-matched control: re-evaluate the SAME probe on a confound-balanced capture.
+    sm_activations = None
+    sm_labels = None
+    if req.structure_matched_capture_id is not None:
+        if req.structure_matched_capture_id not in STATE.captures:
+            raise HTTPException(404, f"Unknown structure_matched_capture_id `{req.structure_matched_capture_id}`.")
+        sm_cap = STATE.captures[req.structure_matched_capture_id]
+        sm_activations = sm_cap["tensors"][layer]
+        if req.structure_matched_labels is None or len(req.structure_matched_labels) != sm_activations.shape[0]:
+            raise HTTPException(400, "structure_matched_labels required and must match the structure-matched capture row count.")
+        sm_labels = np.array(req.structure_matched_labels)
+
     report = run_protocol(
         probe_activations=activations,
         labels=labels,
@@ -411,6 +427,10 @@ def causality_protocol(req: CausalityProtocolRequest) -> Dict[str, Any]:
         probe_bias=p["bias"],
         steering_results=steering_results,
         n_random_seeds=req.n_random_seeds,
+        structure_matched_activations=sm_activations,
+        structure_matched_labels=sm_labels,
+        feature_named=bool(req.feature_name),
+        naming_evidence=req.feature_name,
     )
     report["alpha_sweep"] = req.alpha_sweep
     report["steering_results"] = steering_results
